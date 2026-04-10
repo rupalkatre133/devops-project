@@ -22,6 +22,9 @@ module "vpc" {
   azs            = ["${var.region}a", "${var.region}b"]
   public_subnets = ["10.0.1.0/24", "10.0.2.0/24"]
 
+  # ✅ IMPORTANT FIX
+  map_public_ip_on_launch = true
+
   enable_nat_gateway = false
   enable_vpn_gateway = false
 
@@ -69,12 +72,14 @@ resource "aws_security_group" "jenkins_sg" {
   }
 }
 
-# ---------------- Jenkins EC2 (Ubuntu) ----------------
+# ---------------- Jenkins EC2 ----------------
 resource "aws_instance" "jenkins" {
   ami           = var.ami_id
   instance_type = var.instance_type
   key_name      = var.key_name
   subnet_id     = module.vpc.public_subnets[0]
+
+  associate_public_ip_address = true  # ✅ IMPORTANT
 
   vpc_security_group_ids = [aws_security_group.jenkins_sg.id]
 
@@ -82,19 +87,12 @@ resource "aws_instance" "jenkins" {
               #!/bin/bash
               apt update -y
 
-              # Install Java (OpenJDK 17)
-              apt install -y openjdk-17-jdk
+              apt install -y openjdk-17-jdk docker.io git wget
 
-              # Install Docker
-              apt install -y docker.io
               systemctl start docker
               systemctl enable docker
               usermod -aG docker ubuntu
 
-              # Install Git
-              apt install -y git
-
-              # Install Jenkins
               wget -O /usr/share/keyrings/jenkins-keyring.asc \
                 https://pkg.jenkins.io/debian-stable/jenkins.io-2023.key
 
@@ -108,7 +106,6 @@ resource "aws_instance" "jenkins" {
               systemctl start jenkins
               systemctl enable jenkins
 
-              # Add Jenkins user to Docker group
               usermod -aG docker jenkins
               systemctl restart jenkins
               EOF
@@ -126,15 +123,22 @@ module "eks" {
   cluster_name    = "ci-cd-cluster"
   cluster_version = "1.29"
 
-  subnet_ids = module.vpc.public_subnets
   vpc_id     = module.vpc.vpc_id
+  subnet_ids = module.vpc.public_subnets
+
+  # ✅ IMPORTANT FIX
+  cluster_endpoint_public_access = true
 
   eks_managed_node_groups = {
     default = {
       desired_capacity = 2
       min_capacity     = 1
       max_capacity     = 3
-      instance_types   = ["t3.small"]
+
+      instance_types = ["t3.small"]
+
+      # ✅ IMPORTANT FIX
+      subnet_ids = module.vpc.public_subnets
     }
   }
 
