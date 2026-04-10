@@ -8,10 +8,10 @@ terraform {
 }
 
 provider "aws" {
-  region = "us-east-1"
+  region = var.region
 }
 
-# VPC Module
+# ---------------- VPC ----------------
 module "vpc" {
   source  = "terraform-aws-modules/vpc/aws"
   version = "5.1.2"
@@ -19,7 +19,7 @@ module "vpc" {
   name = "main-vpc"
   cidr = var.vpc_cidr
 
-  azs            = ["us-east-1a", "us-east-1b"]
+  azs            = ["${var.region}a", "${var.region}b"]
   public_subnets = ["10.0.1.0/24", "10.0.2.0/24"]
 
   enable_nat_gateway = false
@@ -31,7 +31,7 @@ module "vpc" {
   }
 }
 
-# Jenkins Security Group
+# ---------------- Security Group ----------------
 resource "aws_security_group" "jenkins_sg" {
   name        = "jenkins-sg"
   description = "Allow SSH and Jenkins UI"
@@ -42,7 +42,7 @@ resource "aws_security_group" "jenkins_sg" {
     from_port   = 22
     to_port     = 22
     protocol    = "tcp"
-    cidr_blocks = ["0.0.0.0/0"]
+    cidr_blocks = var.allowed_ip
   }
 
   ingress {
@@ -50,7 +50,15 @@ resource "aws_security_group" "jenkins_sg" {
     from_port   = 8080
     to_port     = 8080
     protocol    = "tcp"
-    cidr_blocks = ["0.0.0.0/0"]
+    cidr_blocks = var.allowed_ip
+  }
+
+  ingress {
+    description = "App Port"
+    from_port   = 3000
+    to_port     = 3000
+    protocol    = "tcp"
+    cidr_blocks = var.allowed_ip
   }
 
   egress {
@@ -61,18 +69,56 @@ resource "aws_security_group" "jenkins_sg" {
   }
 }
 
-# Jenkins EC2
+# ---------------- Jenkins EC2 (Ubuntu) ----------------
 resource "aws_instance" "jenkins" {
   ami           = var.ami_id
   instance_type = var.instance_type
   key_name      = var.key_name
   subnet_id     = module.vpc.public_subnets[0]
+
   vpc_security_group_ids = [aws_security_group.jenkins_sg.id]
 
-  tags = { Name = "Jenkins-Server" }
+  user_data = <<-EOF
+              #!/bin/bash
+              apt update -y
+
+              # Install Java (OpenJDK 17)
+              apt install -y openjdk-17-jdk
+
+              # Install Docker
+              apt install -y docker.io
+              systemctl start docker
+              systemctl enable docker
+              usermod -aG docker ubuntu
+
+              # Install Git
+              apt install -y git
+
+              # Install Jenkins
+              wget -O /usr/share/keyrings/jenkins-keyring.asc \
+                https://pkg.jenkins.io/debian-stable/jenkins.io-2023.key
+
+              echo "deb [signed-by=/usr/share/keyrings/jenkins-keyring.asc] \
+                https://pkg.jenkins.io/debian-stable binary/" \
+                > /etc/apt/sources.list.d/jenkins.list
+
+              apt update -y
+              apt install -y jenkins
+
+              systemctl start jenkins
+              systemctl enable jenkins
+
+              # Add Jenkins user to Docker group
+              usermod -aG docker jenkins
+              systemctl restart jenkins
+              EOF
+
+  tags = {
+    Name = "Jenkins-Server"
+  }
 }
 
-# EKS Module
+# ---------------- EKS ----------------
 module "eks" {
   source  = "terraform-aws-modules/eks/aws"
   version = "18.31.2"
@@ -88,8 +134,11 @@ module "eks" {
       desired_capacity = 2
       min_capacity     = 1
       max_capacity     = 3
-      instance_types   = ["t3.medium"]
+      instance_types   = ["t3.small"]
     }
   }
-}
 
+  tags = {
+    Environment = "dev"
+  }
+}
