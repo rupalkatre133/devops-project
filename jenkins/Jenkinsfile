@@ -2,55 +2,74 @@ pipeline {
     agent any
 
     environment {
-        IMAGE = "yourdockerhubusername/devops-app:latest"
+        IMAGE_NAME = "devops-app"
+        DOCKERHUB_USER = "rupalkatre"
+        DOCKER_CRED = "docker-creds"
+        GIT_CRED = "github-creds"
+        REPO_URL = "https://github.com/rupalkatre133/devops-project.git"
     }
 
     stages {
 
         stage('Clone Repo') {
             steps {
-                git 'https://github.com/YOUR_USERNAME/YOUR_REPO.git'
+                git branch: 'main', url: "${REPO_URL}"
             }
         }
 
         stage('Build Docker Image') {
             steps {
-                sh 'docker build -t $IMAGE ./app'
+                sh '''
+                docker build -t ${DOCKERHUB_USER}/${IMAGE_NAME}:${BUILD_NUMBER} ./app
+                '''
             }
         }
 
         stage('Docker Login') {
             steps {
-                withCredentials([usernamePassword(credentialsId: 'docker-creds', usernameVariable: 'USER', passwordVariable: 'PASS')]) {
-                    sh 'echo $PASS | docker login -u $USER --password-stdin'
+                withCredentials([usernamePassword(
+                    credentialsId: "${DOCKER_CRED}",
+                    usernameVariable: 'DOCKER_USER',
+                    passwordVariable: 'DOCKER_PASS'
+                )]) {
+                    sh 'echo $DOCKER_PASS | docker login -u $DOCKER_USER --password-stdin'
                 }
             }
         }
 
         stage('Push Image') {
             steps {
-                sh 'docker push $IMAGE'
+                sh '''
+                docker push ${DOCKERHUB_USER}/${IMAGE_NAME}:${BUILD_NUMBER}
+                '''
             }
         }
 
         stage('Update Kubernetes Manifest') {
             steps {
                 sh '''
-                sed -i "s|image:.*|image: $IMAGE|g" k8s/deployment.yaml
+                sed -i "s|image:.*|image: ${DOCKERHUB_USER}/${IMAGE_NAME}:${BUILD_NUMBER}|g" k8s/deployment.yaml
                 '''
             }
         }
 
-        stage('Commit Changes') {
+        stage('Commit & Push Changes') {
             steps {
-                sh '''
-                git config --global user.email "you@example.com"
-                git config --global user.name "jenkins"
+                withCredentials([usernamePassword(
+                    credentialsId: "${GIT_CRED}",
+                    usernameVariable: 'GIT_USER',
+                    passwordVariable: 'GIT_PASS'
+                )]) {
+                    sh '''
+                    git config --global user.email "you@example.com"
+                    git config --global user.name "jenkins"
 
-                git add .
-                git commit -m "Updated image tag"
-                git push origin main
-                '''
+                    git add k8s/deployment.yaml
+                    git commit -m "Updated image to build ${BUILD_NUMBER}" || echo "No changes to commit"
+
+                    git push https://${GIT_USER}:${GIT_PASS}@github.com/rupalkatre133/devops-project.git HEAD:main
+                    '''
+                }
             }
         }
     }
