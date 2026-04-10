@@ -2,9 +2,12 @@ apiVersion: apps/v1
 kind: Deployment
 metadata:
   name: devops-app
+  labels:
+    app: devops-app
 
 spec:
   replicas: 2
+
   selector:
     matchLabels:
       app: devops-app
@@ -17,6 +20,16 @@ spec:
     spec:
       containers:
       - name: devops-app
-        image: yourdockerhubusername/devops-app:latest
+        image: rupalkatre/devops-app:latest   # Jenkins will replace this
         ports:
         - containerPort: 3000
+
+        imagePullPolicy: Always
+
+        resources:
+          requests:
+            cpu: "100m"
+            memory: "128Mi"
+          limits:
+            cpu: "500m"
+            memory: "512Mi"
