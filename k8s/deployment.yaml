@@ -20,7 +20,7 @@ spec:
     spec:
       containers:
       - name: devops-app
-        image: rupalkatre/devops-app:12
+        image: rupalkatre/devops-app:13
         ports:
         - containerPort: 3000
 
