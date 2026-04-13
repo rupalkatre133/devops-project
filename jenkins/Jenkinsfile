@@ -4,8 +4,8 @@ pipeline {
     environment {
         IMAGE_NAME = "devops-app"
         DOCKERHUB_USER = "rupalkatre"
-        DOCKER_CRED = "docker-creds"
-        GIT_CRED = "github-creds"
+        DOCKER_CRED = "docker-cred"
+        GIT_CRED = "github-cred"
         REPO_URL = "https://github.com/rupalkatre133/devops-project.git"
     }
 
@@ -60,8 +60,8 @@ pipeline {
                     passwordVariable: 'GIT_PASS'
                 )]) {
                     sh '''
-                    git config --global user.email "you@example.com"
-                    git config --global user.name "jenkins"
+                    git config --global user.email "rupalkatre133@gmail.com"
+                    git config --global user.name "rupalkatre133"
 
                     git add k8s/deployment.yaml
                     git commit -m "Updated image to build ${BUILD_NUMBER}" || echo "No changes to commit"
