@@ -10,7 +10,6 @@ pipeline {
     }
 
     stages {
-
         stage('Clone Repo') {
             steps {
                 git branch: 'main', url: "${REPO_URL}"
@@ -68,6 +67,18 @@ pipeline {
                     git commit -m "Updated image to build ${BUILD_NUMBER}" || echo "No changes to commit"
 
                     git push https://${GIT_USER}:${GIT_PASS}@github.com/rupalkatre133/devops-project.git HEAD:main
+                    '''
+                }
+            }
+        }
+
+        stage('Deploy to EKS') {
+            steps {
+                withCredentials([file(credentialsId: 'eks-kubeconfig', variable: 'KUBECONFIG')]) {
+                    sh '''
+                    kubectl get nodes
+                    kubectl apply -f k8s/deployment.yaml
+                    kubectl apply -f k8s/service.yaml
                     '''
                 }
             }
